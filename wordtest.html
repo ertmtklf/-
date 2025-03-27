@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Memory Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+        }
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
+        }
+        #main-screen, #game-screen, #game-over-screen {
+            display: none;
+            margin-top: 20px;
+        }
+        .settings-panel {
+            background-color: #2d2d2d;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px auto;
+            max-width: 600px;
+            text-align: left;
+        }
+        .setting-group {
+            margin: 15px 0;
+        }
+        label {
+            display: inline-block;
+            width: 200px;
+            text-align: right;
+            margin-right: 10px;
+        }
+        input, select {
+            width: 100px;
+            padding: 5px;
+            background-color: #3d3d3d;
+            color: #f0f0f0;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #388E3C;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #2E7D32;
+        }
+        #word-display {
+            font-size: 48px;
+            margin: 40px 0;
+            min-height: 60px;
+        }
+        #input-container {
+            margin: 20px 0;
+        }
+        #word-input {
+            padding: 10px;
+            font-size: 18px;
+            width: 300px;
+            background-color: #3d3d3d;
+            color: #f0f0f0;
+            border: 1px solid #444;
+            border-radius: 4px;
+        }
+        #stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            font-size: 24px;
+        }
+        .stat-box {
+            border: 1px solid #444;
+            padding: 10px 20px;
+            border-radius: 5px;
+            background-color: #333;
+        }
+        #settings-toggle {
+            background-color: #2196F3;
+        }
+        #settings-toggle:hover {
+            background-color: #0b7dda;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Word Memory Test</h1>
+    
+    <div id="loading-screen">
+        Loading word list...
+    </div>
+    
+    <div id="main-screen">
+        <button id="start-test-btn">Start Test</button>
+        <button id="settings-toggle">Show Settings</button>
+        
+        <div id="settings-panel" class="settings-panel hidden">
+            <h2>Settings</h2>
+            <div class="setting-group">
+                <label for="min-letters">Minimum Letters:</label>
+                <input type="number" id="min-letters" min="1" value="4">
+            </div>
+            <div class="setting-group">
+                <label for="max-letters">Maximum Letters:</label>
+                <input type="number" id="max-letters" min="1" value="8">
+            </div>
+            <div class="setting-group">
+                <label for="visible-time">Seconds Visible:</label>
+                <input type="number" id="visible-time" min="0.5" value="3" step="0.5">
+            </div>
+            <div class="setting-group">
+                <label for="lives">Amount of Lives:</label>
+                <input type="number" id="lives" min="1" value="3">
+            </div>
+            <div class="setting-group">
+                <label for="exclude-letters">Excluded Letters:</label>
+                <input type="text" id="exclude-letters" placeholder="e.g. QWXZP">
+            </div>
+        </div>
+    </div>
+    
+    <div id="game-screen">
+        <div id="stats">
+            <div class="stat-box">࿇ <span id="score-display">0</span></div>
+            <div class="stat-box">♡ <span id="lives-display">3</span></div>
+        </div>
+        <div id="word-display"></div>
+        <div id="input-container" style="display: none;">
+            <input type="text" id="word-input" placeholder="Type the word here..." autofocus>
+            <button id="submit-btn">Submit</button>
+        </div>
+    </div>
+    
+    <div id="game-over-screen">
+        <h2>Game Over!</h2>
+        <p>Your final score: ࿇ <span id="final-score">0</span></p>
+        <button id="play-again-btn">Play Again</button>
+    </div>
+
+    <script>
+        let wordList = [];
+        let currentWord = "";
+        let score = 0;
+        let lives = 3;
+        let gameSettings = {
+            minLetters: 4,
+            maxLetters: 8,
+            visibleTime: 3,
+            lives: 3,
+            excludedLetters: ""
+        };
+        let timer = null;
+
+        // Load the JSON file
+        async function loadWordList() {
+            try {
+                const response = await fetch('https://files.catbox.moe/gzaxa4.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load word list');
+                }
+                wordList = await response.json();
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('main-screen').style.display = 'block';
+            } catch (error) {
+                document.getElementById('loading-screen').innerHTML = 
+                    'Error loading word list. Please try again later.<br>' + error.message;
+                console.error(error);
+            }
+        }
+
+        // Initialize the app
+        function init() {
+            loadWordList();
+            
+            // Set up event listeners
+            document.getElementById('start-test-btn').addEventListener('click', startTest);
+            document.getElementById('settings-toggle').addEventListener('click', toggleSettings);
+            document.getElementById('submit-btn').addEventListener('click', checkAnswer);
+            document.getElementById('word-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkAnswer();
+                }
+            });
+            document.getElementById('play-again-btn').addEventListener('click', resetGame);
+        }
+
+        // Toggle settings panel visibility
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            const button = document.getElementById('settings-toggle');
+            
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                button.textContent = 'Hide Settings';
+            } else {
+                panel.classList.add('hidden');
+                button.textContent = 'Show Settings';
+            }
+        }
+
+        // Start the test with current settings
+        function startTest() {
+            // Get settings from inputs
+            gameSettings.minLetters = parseInt(document.getElementById('min-letters').value);
+            gameSettings.maxLetters = parseInt(document.getElementById('max-letters').value);
+            gameSettings.visibleTime = parseFloat(document.getElementById('visible-time').value);
+            gameSettings.lives = parseInt(document.getElementById('lives').value);
+            gameSettings.excludedLetters = document.getElementById('exclude-letters').value.toUpperCase();
+            
+            // Validate settings
+            if (gameSettings.minLetters > gameSettings.maxLetters) {
+                alert('Minimum letters cannot be greater than maximum letters');
+                return;
+            }
+            
+            // Reset game state
+            score = 0;
+            lives = gameSettings.lives;
+            
+            // Update UI
+            document.getElementById('main-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.getElementById('score-display').textContent = score;
+            document.getElementById('lives-display').textContent = lives;
+            
+            // Start the first round
+            showNewWord();
+        }
+
+        // Show a new random word that matches the criteria
+        function showNewWord() {
+            // Filter words by length and excluded letters
+            const filteredWords = wordList.filter(word => {
+                // Check length
+                if (word.length < gameSettings.minLetters || word.length > gameSettings.maxLetters) {
+                    return false;
+                }
+                
+                // Check excluded letters
+                if (gameSettings.excludedLetters) {
+                    const upperWord = word.toUpperCase();
+                    for (const letter of gameSettings.excludedLetters) {
+                        if (upperWord.includes(letter)) {
+                            return false;
+                        }
+                    }
+                }
+                
+                return true;
+            });
+            
+            if (filteredWords.length === 0) {
+                alert('No words found matching the current criteria. Please adjust your settings.');
+                resetGame();
+                return;
+            }
+            
+            // Pick a random word
+            currentWord = filteredWords[Math.floor(Math.random() * filteredWords.length)];
+            
+            // Show the word
+            document.getElementById('word-display').textContent = currentWord;
+            document.getElementById('input-container').style.display = 'none';
+            
+            // Set timer to hide the word and show input
+            timer = setTimeout(() => {
+                document.getElementById('word-display').textContent = '';
+                document.getElementById('input-container').style.display = 'block';
+                document.getElementById('word-input').value = '';
+                document.getElementById('word-input').focus();
+            }, gameSettings.visibleTime * 1000);
+        }
+
+        // Check if the user's answer is correct
+        function checkAnswer() {
+            const userAnswer = document.getElementById('word-input').value.trim().toLowerCase();
+            
+            if (userAnswer === currentWord.toLowerCase()) {
+                // Correct answer
+                score++;
+                document.getElementById('score-display').textContent = score;
+                showNewWord();
+            } else {
+                // Wrong answer
+                lives--;
+                document.getElementById('lives-display').textContent = lives;
+                
+                if (lives <= 0) {
+                    // Game over
+                    gameOver();
+                } else {
+                    // Immediately show next word
+                    clearTimeout(timer);
+                    showNewWord();
+                }
+            }
+        }
+
+        // Handle game over
+        function gameOver() {
+            clearTimeout(timer);
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'block';
+            document.getElementById('final-score').textContent = score;
+        }
+
+        // Reset the game to main screen
+        function resetGame() {
+            clearTimeout(timer);
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.getElementById('main-screen').style.display = 'block';
+        }
+
+        // Start the app when the page loads
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
