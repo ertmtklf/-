@@ -129,6 +129,49 @@
             padding: 5px;
             border-bottom: 1px solid #444;
         }
+        .match-group {
+            margin-left: 210px;
+            margin-bottom: 10px;
+        }
+        .match-input {
+            margin-bottom: 5px;
+        }
+        .match-input label {
+            width: 100px;
+            text-align: left;
+        }
+        #settings-history {
+            margin: 20px auto;
+            max-width: 500px;
+            text-align: left;
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        #settings-history h3 {
+            margin-top: 0;
+            text-align: center;
+        }
+        .settings-entry {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background-color: #333;
+        }
+        .settings-entry p {
+            margin: 5px 0;
+        }
+        #show-settings-btn {
+            background-color: #757575;
+            padding: 8px 15px;
+        }
+        #show-settings-btn:hover {
+            background-color: #616161;
+        }
     </style>
 </head>
 <body>
@@ -161,6 +204,23 @@
                 <input type="number" id="lives" min="1" value="3">
             </div>
             <div class="setting-group">
+                <label>Letter Matching:</label>
+                <div class="match-group">
+                    <div class="match-input">
+                        <label for="starts-with">Starts With:</label>
+                        <input type="text" id="starts-with" placeholder="e.g. AB">
+                    </div>
+                    <div class="match-input">
+                        <label for="contains">Contains:</label>
+                        <input type="text" id="contains" placeholder="e.g. CD">
+                    </div>
+                    <div class="match-input">
+                        <label for="ends-with">Ends With:</label>
+                        <input type="text" id="ends-with" placeholder="e.g. EF">
+                    </div>
+                </div>
+            </div>
+            <div class="setting-group">
                 <label for="exclude-letters">Excluded Letters:</label>
                 <input type="text" id="exclude-letters" placeholder="e.g. QWXZP">
             </div>
@@ -184,9 +244,14 @@
         <h2>Game Over!</h2>
         <p>Your final score: ࿇ <span id="final-score">0</span></p>
         <p>Average WPM: <span id="final-wpm">0</span></p>
+        <button id="show-settings-btn">⚙ Show Round Settings</button>
         <div id="failed-words">
             <h3>Words You Failed On:</h3>
             <!-- Failed words will appear here -->
+        </div>
+        <div id="settings-history">
+            <h3>Round Settings History</h3>
+            <!-- Settings history will appear here -->
         </div>
         <button id="play-again-btn">Play Again</button>
     </div>
@@ -201,6 +266,9 @@
             maxLetters: 8,
             visibleTime: 3,
             lives: 3,
+            startsWith: "",
+            contains: "",
+            endsWith: "",
             excludedLetters: ""
         };
         let timer = null;
@@ -208,6 +276,7 @@
         let wordsPerMinute = 0;
         let correctWordsCount = 0;
         let failedWords = [];
+        let settingsHistory = [];
 
         // Load the JSON file
         async function loadWordList() {
@@ -240,6 +309,7 @@
                 }
             });
             document.getElementById('play-again-btn').addEventListener('click', resetGame);
+            document.getElementById('show-settings-btn').addEventListener('click', toggleSettingsHistory);
         }
 
         // Toggle settings panel visibility
@@ -256,6 +326,20 @@
             }
         }
 
+        // Toggle settings history visibility
+        function toggleSettingsHistory() {
+            const historyPanel = document.getElementById('settings-history');
+            const button = document.getElementById('show-settings-btn');
+            
+            if (historyPanel.style.display === 'none' || !historyPanel.style.display) {
+                historyPanel.style.display = 'block';
+                button.textContent = '⚙ Hide Round Settings';
+            } else {
+                historyPanel.style.display = 'none';
+                button.textContent = '⚙ Show Round Settings';
+            }
+        }
+
         // Start the test with current settings
         function startTest() {
             // Get settings from inputs
@@ -263,6 +347,9 @@
             gameSettings.maxLetters = parseInt(document.getElementById('max-letters').value);
             gameSettings.visibleTime = parseFloat(document.getElementById('visible-time').value);
             gameSettings.lives = parseInt(document.getElementById('lives').value);
+            gameSettings.startsWith = document.getElementById('starts-with').value.toUpperCase();
+            gameSettings.contains = document.getElementById('contains').value.toUpperCase();
+            gameSettings.endsWith = document.getElementById('ends-with').value.toUpperCase();
             gameSettings.excludedLetters = document.getElementById('exclude-letters').value.toUpperCase();
             
             // Validate settings
@@ -276,6 +363,7 @@
             lives = gameSettings.lives;
             correctWordsCount = 0;
             failedWords = [];
+            settingsHistory = [];
             startTime = Date.now();
             
             // Update UI
@@ -286,8 +374,20 @@
             document.getElementById('lives-display').textContent = lives;
             document.getElementById('wpm-display').textContent = '0';
             
+            // Record initial settings
+            recordSettings();
+            
             // Start the first round
             showNewWord();
+        }
+
+        // Record current settings to history
+        function recordSettings() {
+            settingsHistory.push({
+                round: score + 1,
+                settings: {...gameSettings},
+                timestamp: new Date().toLocaleTimeString()
+            });
         }
 
         // Calculate and update WPM
@@ -299,16 +399,32 @@
 
         // Show a new random word that matches the criteria
         function showNewWord() {
-            // Filter words by length and excluded letters
+            // Filter words by all criteria
             const filteredWords = wordList.filter(word => {
+                const upperWord = word.toUpperCase();
+                
                 // Check length
                 if (word.length < gameSettings.minLetters || word.length > gameSettings.maxLetters) {
                     return false;
                 }
                 
+                // Check starts with
+                if (gameSettings.startsWith && !upperWord.startsWith(gameSettings.startsWith)) {
+                    return false;
+                }
+                
+                // Check contains
+                if (gameSettings.contains && !gameSettings.contains.split('').some(letter => upperWord.includes(letter))) {
+                    return false;
+                }
+                
+                // Check ends with
+                if (gameSettings.endsWith && !upperWord.endsWith(gameSettings.endsWith)) {
+                    return false;
+                }
+                
                 // Check excluded letters
                 if (gameSettings.excludedLetters) {
-                    const upperWord = word.toUpperCase();
                     for (const letter of gameSettings.excludedLetters) {
                         if (upperWord.includes(letter)) {
                             return false;
@@ -358,6 +474,7 @@
                 }
                 
                 updateWPM();
+                recordSettings();
                 showNewWord();
             } else {
                 // Wrong answer
@@ -372,6 +489,7 @@
                     // Immediately show next word
                     clearTimeout(timer);
                     updateWPM();
+                    recordSettings();
                     showNewWord();
                 }
             }
@@ -396,18 +514,22 @@
                     failedWordsContainer.innerHTML += `<div>${word}</div>`;
                 });
             }
-        }
-
-        // Reset the game to main screen
-        function resetGame() {
-            clearTimeout(timer);
-            document.getElementById('game-screen').style.display = 'none';
-            document.getElementById('game-over-screen').style.display = 'none';
-            document.getElementById('main-screen').style.display = 'block';
-        }
-
-        // Start the app when the page loads
-        window.addEventListener('DOMContentLoaded', init);
-    </script>
-</body>
-</html>
+            
+            // Display settings history
+            const settingsHistoryContainer = document.getElementById('settings-history');
+            settingsHistoryContainer.innerHTML = '<h3>Round Settings History</h3>';
+            
+            if (settingsHistory.length === 0) {
+                settingsHistoryContainer.innerHTML += '<div>No settings history available</div>';
+            } else {
+                settingsHistory.forEach(entry => {
+                    const entryDiv = document.createElement('div');
+                    entryDiv.className = 'settings-entry';
+                    entryDiv.innerHTML = `
+                        <p><strong>Round ${entry.round}</strong> (${entry.timestamp})</p>
+                        <p>Letters: ${entry.settings.minLetters}-${entry.settings.maxLetters}</p>
+                        <p>Visible Time: ${entry.settings.visibleTime}s</p>
+                        ${entry.settings.startsWith ? `<p>Starts With: ${entry.settings.startsWith}</p>` : ''}
+                        ${entry.settings.contains ? `<p>Contains: ${entry.settings.contains}</p>` : ''}
+                        ${entry.settings.endsWith ? `<p>Ends With: ${entry.settings.endsWith}</p>` : ''}
+                        ${entry.settings.ex
